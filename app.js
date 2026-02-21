@@ -133,7 +133,7 @@
       deferredInstall: null,
       liveMap: null,
       historyMap: null,
-      liveLayers: { route: null, speedSegments: [], markers: [] },
+      liveLayers: { route: null, speedSegments: [], markers: [], currentMarker: null, accuracyCircle: null },
       historyLayers: { route: null, speedSegments: [] },
       selectedHistoryId: null,
       recordingVoice: null,
@@ -203,6 +203,7 @@
       $("#stationLabel").textContent = st.name;
       if (state.ui.liveMap) state.ui.liveMap.setView([st.lat, st.lon], st.zoom);
       savePrefs();
+      renderMeteoSessionContext();
     });
     $("#stationLabel").textContent = stationById(select.value).name;
   }
@@ -222,6 +223,10 @@
         setTimeout(() => {
           state.ui.liveMap?.invalidateSize();
         }, 50);
+      }
+      if (btn.dataset.tab === "meteo") {
+        renderWeatherBox();
+        renderMeteoSessionContext();
       }
     }));
   }
@@ -286,6 +291,10 @@
       });
       L.marker([st.lat, st.lon], { icon: skiIcon }).addTo(map).bindPopup(st.name);
     });
+    setTimeout(() => {
+      state.ui.liveMap?.invalidateSize();
+      state.ui.historyMap?.invalidateSize();
+    }, 120);
   }
 
   function clearLiveRouteLayers() {
@@ -333,6 +342,80 @@
     if (!map || !points || points.length < 2) return;
     const bounds = L.latLngBounds(points.map(p => [p.lat, p.lon]));
     map.fitBounds(bounds.pad(0.1));
+  }
+
+
+  function updateLiveLocationMarker(point) {
+    const map = state.ui.liveMap;
+    if (!map || !point) return;
+    const latlng = [point.lat, point.lon];
+    if (!state.ui.liveLayers.currentMarker) {
+      state.ui.liveLayers.currentMarker = L.circleMarker(latlng, {
+        radius: 7,
+        color: "#ffffff",
+        weight: 2,
+        fillColor: "#2563eb",
+        fillOpacity: 0.95
+      }).addTo(map).bindPopup("Tu ubicación");
+    } else {
+      state.ui.liveLayers.currentMarker.setLatLng(latlng);
+    }
+    if (!state.ui.liveLayers.accuracyCircle) {
+      state.ui.liveLayers.accuracyCircle = L.circle(latlng, {
+        radius: point.acc || 8,
+        color: "#60a5fa",
+        weight: 1,
+        opacity: 0.75,
+        fillOpacity: 0.08
+      }).addTo(map);
+    } else {
+      state.ui.liveLayers.accuracyCircle.setLatLng(latlng);
+      if (point.acc) state.ui.liveLayers.accuracyCircle.setRadius(point.acc);
+    }
+    state.ui.lastKnownPosition = { lat: point.lat, lon: point.lon, acc: point.acc || null, ts: point.ts };
+  }
+
+  function centerOnCurrentLocation() {
+    const p = state.active?.points?.[state.active.points.length - 1] || state.ui.lastKnownPosition;
+    if (p && state.ui.liveMap) {
+      state.ui.liveMap.setView([p.lat, p.lon], Math.max(state.ui.liveMap.getZoom(), 15));
+      return;
+    }
+    if (!navigator.geolocation) {
+      setWarning("Geolocalización no soportada.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const c = pos.coords;
+      const point = { lat: c.latitude, lon: c.longitude, acc: Number.isFinite(c.accuracy) ? c.accuracy : null, ts: pos.timestamp || Date.now() };
+      updateLiveLocationMarker(point);
+      state.ui.liveMap?.setView([point.lat, point.lon], 15);
+    }, (err) => {
+      setWarning("No se pudo centrar en tu ubicación: " + (err.message || err));
+    }, { enableHighAccuracy: false, timeout: 10000 });
+  }
+
+  function fitCurrentTrack() {
+    const pts = state.active?.points || [];
+    if (pts.length >= 2) {
+      fitMapToPoints(state.ui.liveMap, pts);
+    } else {
+      centerOnCurrentLocation();
+    }
+  }
+
+  function openPisteFullscreen() {
+    const modal = $("#pisteFullscreenModal");
+    if (!modal) return;
+    modal.hidden = false;
+    document.body.style.overflow = "hidden";
+  }
+
+  function closePisteFullscreen() {
+    const modal = $("#pisteFullscreenModal");
+    if (!modal) return;
+    modal.hidden = true;
+    document.body.style.overflow = "";
   }
 
   // ---------- Permissions ----------
@@ -392,24 +475,31 @@
     $("#calibrateBtn").addEventListener("click", calibrateSensors);
     $("#permLocation").addEventListener("click", requestLocationPermission);
     $("#permMotion").addEventListener("click", requestMotionPermission);
-    $("#permMic").addEventListener("click", requestMicPermission);
+    $("#permMic")?.addEventListener("click", requestMicPermission);
     $("#wakeBtn").addEventListener("click", toggleWakeLock);
+    $("#weatherTabRefreshBtn")?.addEventListener("click", fetchWeatherForSelectedStation);
+    $("#centerMapBtn")?.addEventListener("click", centerOnCurrentLocation);
+    $("#fitTrackBtn")?.addEventListener("click", fitCurrentTrack);
+    $("#openPisteFullscreenBtn")?.addEventListener("click", openPisteFullscreen);
+    $("#closePisteFullscreenBtn")?.addEventListener("click", closePisteFullscreen);
+    $("#closePisteFullscreenBackdrop")?.addEventListener("click", closePisteFullscreen);
+    $("#formigalPisteMapImg")?.addEventListener("click", openPisteFullscreen);
 
     $("#gpsMode").addEventListener("change", savePrefs);
     $("#phonePlacement").addEventListener("change", savePrefs);
 
-    $("#addNoteBtn").addEventListener("click", () => {
-      const text = $("#noteText").value.trim();
+    $("#addNoteBtn")?.addEventListener("click", () => {
+      const noteInput = $("#noteText");
+      const text = noteInput?.value.trim();
       if (!text) return;
       if (!state.active) {
-        // allow pre-session notes? attach to draft only in timeline if active, else warn
         setWarning("Empieza una sesión para añadir notas al timeline.");
         return;
       }
       const note = { id: uid(), ts: Date.now(), text };
       state.active.notes.push(note);
       state.active.events.push({ id: uid(), ts: note.ts, type: "note", label: text });
-      $("#noteText").value = "";
+      noteInput.value = "";
       renderTimeline();
       saveDraft();
     });
@@ -604,6 +694,7 @@
     }
 
     pts.push(point);
+    updateLiveLocationMarker(point);
 
     // Detect state change events (stops, movement, lift/descent approximate)
     maybeEmitMovementEvents();
@@ -1131,7 +1222,6 @@
     const station = s.stationName;
     const cond = `${s.config.snowCondition}, visibilidad ${s.config.visibility}, viento ${s.config.windLevel}`;
     const topRunTxt = summary.topRun ? `${round(summary.topRun.maxSpeedKmh,1)} km/h y ${round(summary.topRun.distanceM/1000,2)} km` : "sin runs detectados";
-    const notes = s.notes.slice(-3).map(n => `• ${n.text}`).join("\n");
     const jumpsTxt = s.config.jumpEnabled ? `${summary.jumps} salto(s) detectados (estimado).` : "detección de saltos desactivada.";
     const weather = s.weather ? `\nMeteo auto: ${s.weather.summary}.` : "";
 
@@ -1148,8 +1238,6 @@ Runs detectados: ${summary.runsCount}. Top run: ${topRunTxt}.
 ${jumpsTxt}
 Momento más intenso: ${summary.topIntensity ? `${summary.topIntensity.label} (${summary.topIntensity.score}) a las ${timeStr(summary.topIntensity.ts)}` : "no disponible"}.
 
-Notas destacadas:
-${notes || "• Sin notas añadidas"}
 
 Caption corto:
 "${station} ✅ ${round(summary.distanceKm,1)} km · máx ${round(summary.topSpeedKmh,0)} km/h · ${summary.runsCount} runs · ${s.type.toLowerCase()} day 🔥"`;
@@ -1252,7 +1340,7 @@ Caption corto:
     const st = stationById($("#stationSelect").value);
     try {
       setWarning("Cargando meteo automática…");
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${st.lat}&longitude=${st.lon}&current=temperature_2m,apparent_temperature,wind_speed_10m,weather_code,precipitation&hourly=snowfall,snow_depth&timezone=auto`;
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${st.lat}&longitude=${st.lon}&current=temperature_2m,apparent_temperature,wind_speed_10m,weather_code,precipitation&hourly=temperature_2m,wind_speed_10m,snowfall,snow_depth&timezone=auto`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -1267,10 +1355,10 @@ Caption corto:
         }
       }
       const summary = `${st.name}: ${round(current.temperature_2m ?? 0,1)}°C, sensación ${round(current.apparent_temperature ?? 0,1)}°C, viento ${round(current.wind_speed_10m ?? 0,0)} km/h` +
-        (snowDepth != null ? `, snow depth ${round(snowDepth,0)} cm` : "") +
-        (snowfall != null ? `, snowfall ${round(snowfall,1)} mm` : "");
+        (snowDepth != null ? `, espesor nieve ${round(snowDepth,0)} cm` : "") +
+        (snowfall != null ? `, nieve/h ${round(snowfall,1)} mm` : "");
       state.ui.weatherData = {
-        stationId: st.id, ts: Date.now(), raw: data, summary,
+        stationId: st.id, ts: Date.now(), raw: data, summary, timezone: data.timezone || null,
         current: {
           tempC: current.temperature_2m, feelsC: current.apparent_temperature,
           windKmh: current.wind_speed_10m, weatherCode: current.weather_code, snowDepthCm: snowDepth, snowfall: snowfall
@@ -1286,17 +1374,92 @@ Caption corto:
 
   function renderWeatherBox() {
     const box = $("#weatherBox");
+    const extraBox = $("#weatherExtraBox");
     const w = state.ui.weatherData;
+    renderMeteoSessionContext();
     if (!w) {
-      box.textContent = "Sin datos de meteo.";
+      if (box) box.textContent = "Sin datos de meteo.";
+      if (extraBox) extraBox.textContent = "Pulsa actualizar para cargar temperatura, viento y nieve estimada.";
       return;
     }
     const partBeta = partEstimateFromWeather(w.current);
+    const weatherLabel = weatherCodeToLabel(w.current?.weatherCode);
+    const temp = round(w.current?.tempC ?? 0, 1);
+    const feels = round(w.current?.feelsC ?? 0, 1);
+    const wind = round(w.current?.windKmh ?? 0, 0);
+    const snowDepth = w.current?.snowDepthCm;
+    const snowfall = w.current?.snowfall;
+
+    if (box) {
+      box.innerHTML = `
+        <div><strong>${escapeHtml(w.summary)}</strong></div>
+        <div style="margin-top:8px">Estado cielo (estimado): <strong>${escapeHtml(weatherLabel)}</strong></div>
+        <div style="margin-top:6px"><strong>Parte estimado (beta)</strong>: ${escapeHtml(partBeta)}</div>
+        <div class="small" style="margin-top:6px">Actualizado: ${dateStr(w.ts)}${w.timezone ? ` · ${escapeHtml(w.timezone)}` : ""}</div>
+      `;
+    }
+
+    if (extraBox) {
+      const hours = weatherHourlyPreview(w.raw);
+      extraBox.innerHTML = `
+        <div><strong>Detalle rápido</strong></div>
+        <div class="small" style="margin-top:6px">🌡 ${temp}°C (sensación ${feels}°C) · 💨 ${wind} km/h</div>
+        <div class="small">❄️ Espesor: ${snowDepth != null ? `${round(snowDepth,0)} cm` : "—"} · Nieve/h: ${snowfall != null ? `${round(snowfall,1)} mm` : "—"}</div>
+        <div style="margin-top:8px"><strong>Próximas horas</strong></div>
+        <div class="small" style="margin-top:4px">${hours}</div>
+      `;
+    }
+  }
+
+  function renderMeteoSessionContext() {
+    const box = $("#meteoSessionContext");
+    if (!box) return;
+    const stationName = stationById($("#stationSelect")?.value || DEFAULT_STATION).name;
+    const snow = $("#snowCondition")?.value || "—";
+    const vis = $("#visibility")?.value || "—";
+    const wind = $("#windLevel")?.value || "—";
+    const gpsMode = $("#gpsMode")?.value || "balanced";
     box.innerHTML = `
-      <div><strong>${escapeHtml(w.summary)}</strong></div>
-      <div style="margin-top:8px"><strong>Parte estimado (beta)</strong>: ${escapeHtml(partBeta)}</div>
-      <div class="small" style="margin-top:6px">Actualizado: ${dateStr(w.ts)}</div>
+      <div><strong>Estación</strong>: ${escapeHtml(stationName)}</div>
+      <div style="margin-top:6px"><strong>Condiciones manuales</strong>: nieve ${escapeHtml(snow)} · visibilidad ${escapeHtml(vis)} · viento ${escapeHtml(wind)}</div>
+      <div style="margin-top:6px" class="small">GPS: ${escapeHtml(gpsMode)} · Puedes cambiarlo en la pestaña Sesión.</div>
     `;
+  }
+
+  function weatherHourlyPreview(raw) {
+    try {
+      const times = raw?.hourly?.time || [];
+      const temps = raw?.hourly?.temperature_2m || [];
+      const winds = raw?.hourly?.wind_speed_10m || [];
+      if (!times.length) return "Sin detalle horario.";
+      const nowIso = raw?.current?.time;
+      let idx = Math.max(0, times.indexOf(nowIso));
+      if (idx < 0) idx = 0;
+      const picks = [];
+      for (let i = idx; i < Math.min(times.length, idx + 6); i += 2) {
+        const t = new Date(times[i]).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const temp = Number.isFinite(temps[i]) ? `${round(temps[i],0)}°C` : "—";
+        const wind = Number.isFinite(winds[i]) ? `${round(winds[i],0)} km/h` : "—";
+        picks.push(`${t}: ${temp}, ${wind}`);
+      }
+      return picks.join(" · ");
+    } catch {
+      return "Sin detalle horario.";
+    }
+  }
+
+  function weatherCodeToLabel(code) {
+    const map = {
+      0: "despejado", 1: "poco nuboso", 2: "parcialmente nuboso", 3: "nuboso",
+      45: "niebla", 48: "niebla con escarcha",
+      51: "llovizna débil", 53: "llovizna", 55: "llovizna intensa",
+      61: "lluvia débil", 63: "lluvia", 65: "lluvia intensa",
+      71: "nieve débil", 73: "nieve", 75: "nieve intensa",
+      77: "granitos de nieve", 80: "chubascos débiles", 81: "chubascos", 82: "chubascos intensos",
+      85: "chubascos de nieve", 86: "chubascos de nieve intensos",
+      95: "tormenta", 96: "tormenta con granizo", 99: "tormenta con granizo fuerte"
+    };
+    return map[code] || `código ${code ?? "—"}`;
   }
 
   function partEstimateFromWeather(c) {
@@ -1429,6 +1592,7 @@ Caption corto:
 
   function renderCompareSelects() {
     const a = $("#compareA"), b = $("#compareB");
+    if (!a || !b) return;
     const sessions = state.cache.sessions;
     const opts = sessions.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${new Date(s.startedAt).toLocaleDateString()})</option>`).join("");
     a.innerHTML = opts; b.innerHTML = opts;
@@ -1437,9 +1601,10 @@ Caption corto:
   }
 
   function compareSessions() {
-    const sA = state.cache.sessions.find(s => s.id === $("#compareA").value);
-    const sB = state.cache.sessions.find(s => s.id === $("#compareB").value);
-    const box = $("#compareResult");
+    const aSel = $("#compareA"), bSel = $("#compareB"), box = $("#compareResult");
+    if (!aSel || !bSel || !box) return;
+    const sA = state.cache.sessions.find(s => s.id === aSel.value);
+    const sB = state.cache.sessions.find(s => s.id === bSel.value);
     if (!sA || !sB) { box.textContent = "Selecciona dos sesiones."; return; }
     const A = sA.summary || buildSummary(sA);
     const B = sB.summary || buildSummary(sB);
@@ -1462,7 +1627,7 @@ Caption corto:
 
   function bindHistoryActions() {
     $("#refreshHistoryBtn").addEventListener("click", async () => { await refreshCaches(); await renderHistory(); });
-    $("#compareBtn").addEventListener("click", compareSessions);
+    $("#compareBtn")?.addEventListener("click", compareSessions);
 
     $("#deleteSelectedBtn").addEventListener("click", async () => {
       const id = state.ui.selectedHistoryId;
@@ -1494,6 +1659,7 @@ Caption corto:
       $("#stationLabel").textContent = stationById(s.stationId).name;
       state.ui.liveMap.setView([stationById(s.stationId).lat, stationById(s.stationId).lon], stationById(s.stationId).zoom);
       document.querySelector('.tab[data-tab="live"]')?.click();
+      renderMeteoSessionContext();
       setWarning("Configuración duplicada al panel de sesión.");
     });
 
@@ -1596,6 +1762,7 @@ Caption corto:
       fitMapToPoints(state.ui.liveMap, d.points || []);
       renderAllLive();
       await renderMediaPreview();
+      renderMeteoSessionContext();
       setWarning("Borrador recuperado.");
     } catch (err) {
       setWarning("No se pudo recuperar borrador: " + (err.message || err));
@@ -1634,6 +1801,7 @@ Caption corto:
     await renderMediaPreview();
     if (state.active?.points?.length) drawRouteOnMap(state.ui.liveMap, state.ui.liveLayers, state.active.points, $("#speedColorToggle").checked);
     if (state.ui.weatherData) renderWeatherBox();
+    renderMeteoSessionContext();
   }
 
   function setWarning(msg) {
@@ -1680,6 +1848,7 @@ Caption corto:
     await refreshCaches();
     await renderHistory();
     renderWeatherBox();
+    renderMeteoSessionContext();
     setSessionButtons("stopped");
     recoverDraftSilently();
     registerServiceWorker();
