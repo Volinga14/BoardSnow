@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1220" />
+  <meta name="description" content="PWA de tracking para esquí/snow en Formigal: GPS, velocidad, sensores, timeline, mapa de pistas y resumen." />
+  <title>Formigal Session AI</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" type="image/png" href="./icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="app" class="theme-dark">
+    <header class="topbar">
+      <div>
+        <h1>🏂 Formigal Session AI</h1>
+        <p class="sub">PWA v1 · GPS + sensores + mapa pistas + resumen</p>
+      </div>
+      <div class="top-actions">
+        <button id="installBtn" class="ghost" hidden>Instalar</button>
+        <button id="themeBtn" class="ghost">🌙/☀️</button>
+        <button id="contrastBtn" class="ghost">Alto contraste</button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="live">Sesión</button>
+      <button class="tab" data-tab="history">Historial</button>
+      <button class="tab" data-tab="compare">Comparar</button>
+      <button class="tab" data-tab="settings">Ajustes</button>
+    </nav>
+
+    <main>
+      <!-- LIVE TAB -->
+      <section id="tab-live" class="tab-pane active">
+        <div class="grid two">
+          <section class="card">
+            <h2>Configuración sesión</h2>
+            <div class="form-grid">
+              <label>Nombre sesión
+                <input id="sessionName" type="text" placeholder="Formigal Día 1" />
+              </label>
+              <label>Trip (opcional)
+                <input id="tripName" type="text" placeholder="Formigal Febrero 2026" />
+              </label>
+              <label>Tipo
+                <select id="sessionType">
+                  <option>Snowboard</option>
+                  <option>Esquí</option>
+                </select>
+              </label>
+              <label>Estación
+                <select id="stationSelect"></select>
+              </label>
+              <label>Precisión GPS
+                <select id="gpsMode">
+                  <option value="balanced">Equilibrado</option>
+                  <option value="high">Alta precisión</option>
+                </select>
+              </label>
+              <label>Colocación móvil (perfil)
+                <select id="phonePlacement">
+                  <option value="jacket">Bolsillo chaqueta</option>
+                  <option value="pants">Pantalón</option>
+                  <option value="backpack">Mochila</option>
+                  <option value="chest">Pecho</option>
+                </select>
+              </label>
+              <label>Condición nieve
+                <select id="snowCondition">
+                  <option>polvo</option>
+                  <option>dura</option>
+                  <option>primavera</option>
+                  <option>hielo</option>
+                </select>
+              </label>
+              <label>Visibilidad
+                <select id="visibility">
+                  <option>buena</option>
+                  <option>media</option>
+                  <option>mala</option>
+                </select>
+              </label>
+              <label>Viento
+                <select id="windLevel">
+                  <option>bajo</option>
+                  <option>medio</option>
+                  <option>fuerte</option>
+                </select>
+              </label>
+              <label>Detección de saltos
+                <select id="jumpToggle">
+                  <option value="on">Activada</option>
+                  <option value="off">Desactivada</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="btn-row">
+              <button id="startBtn" class="primary big">▶ Start</button>
+              <button id="pauseBtn" class="warn big" disabled>⏸ Pause</button>
+              <button id="resumeBtn" class="ok big" disabled>⏵ Resume</button>
+              <button id="stopBtn" class="danger big" disabled>⏹ Stop</button>
+            </div>
+            <div class="btn-row">
+              <button id="markerBtn" class="ghost">📍 Marcador rápido</button>
+              <button id="wakeBtn" class="ghost">🔆 Mantener pantalla</button>
+              <button id="weatherBtn" class="ghost">🌤 Meteo Formigal (auto)</button>
+              <button id="calibrateBtn" class="ghost">🧭 Calibrar sensores (5s)</button>
+            </div>
+
+            <div id="statusPills" class="pill-wrap">
+              <span class="pill" id="gpsStatus">GPS: —</span>
+              <span class="pill" id="motionStatus">Movimiento: —</span>
+              <span class="pill" id="micStatus">Mic: —</span>
+              <span class="pill" id="batteryStatus">Batería: normal</span>
+              <span class="pill" id="wakeStatus">Pantalla: normal</span>
+            </div>
+            <div id="warningBox" class="notice"></div>
+          </section>
+
+          <section class="card">
+            <h2>Asistente permisos y test sensores</h2>
+            <div class="btn-row">
+              <button id="permLocation" class="ghost">Permiso ubicación</button>
+              <button id="permMotion" class="ghost">Permiso movimiento</button>
+              <button id="permMic" class="ghost">Permiso micrófono</button>
+            </div>
+            <div class="sensor-test">
+              <div>Accel mag: <strong id="accelLive">—</strong></div>
+              <div>Rot mag: <strong id="rotLive">—</strong></div>
+              <div>Intensidad: <strong id="intensityLive">—</strong></div>
+              <div>Calibración: <strong id="calibrationState">no</strong></div>
+            </div>
+            <p class="small">
+              Consejo PWA: para sesiones largas, deja la app en primer plano y con pantalla activa para mejorar el tracking.
+            </p>
+          </section>
+        </div>
+
+        <div class="grid two">
+          <section class="card">
+            <div class="card-head">
+              <h2>Mapa en vivo</h2>
+              <label class="toggle-inline">
+                <input id="speedColorToggle" type="checkbox" /> Colorear por velocidad
+              </label>
+            </div>
+            <div id="map" class="map"></div>
+            <div class="small">Estación seleccionada: <span id="stationLabel">Formigal</span></div>
+            <details class="piste-map-panel" open>
+              <summary>🗺️ Mapa de pistas de Formigal (alta resolución)</summary>
+              <div class="small">Referencia visual de pistas y remontes (online). Úsalo como apoyo junto al track GPS.</div>
+              <div class="piste-map-wrap">
+                <img id="formigalPisteMapImg" src="https://cdn.bfldr.com/WIENNW6Q/as/jr2c2v6v3qnxqkqwqrnr6xcn/Frmigal?auto=webp&width=2048" alt="Mapa de pistas de Formigal" loading="lazy" />
+              </div>
+              <div class="btn-row">
+                <a class="ghost-link" href="https://www.onthesnow.co.uk/aragon/formigal/pistemap.html" target="_blank" rel="noopener">Abrir fuente del mapa</a>
+              </div>
+            </details>
+          </section>
+
+          <section class="card">
+            <h2>Panel de sesión</h2>
+            <div class="stats-live">
+              <div class="stat"><span>Velocidad</span><strong id="liveSpeed">0.0 km/h</strong></div>
+              <div class="stat"><span>Máx</span><strong id="liveMaxSpeed">0.0 km/h</strong></div>
+              <div class="stat"><span>Media</span><strong id="liveAvgSpeed">0.0 km/h</strong></div>
+              <div class="stat"><span>Distancia</span><strong id="liveDistance">0.00 km</strong></div>
+              <div class="stat"><span>Duración</span><strong id="liveDuration">00:00:00</strong></div>
+              <div class="stat"><span>Movimiento</span><strong id="liveMovingTime">00:00:00</strong></div>
+              <div class="stat"><span>Desnivel +</span><strong id="liveAsc">0 m</strong></div>
+              <div class="stat"><span>Desnivel −</span><strong id="liveDesc">0 m</strong></div>
+              <div class="stat"><span>Runs</span><strong id="liveRuns">0</strong></div>
+              <div class="stat"><span>Saltos</span><strong id="liveJumps">0</strong></div>
+              <div class="stat"><span>Top run</span><strong id="liveTopRun">—</strong></div>
+              <div class="stat"><span>Momento intenso</span><strong id="liveTopIntensity">—</strong></div>
+            </div>
+          </section>
+        </div>
+
+        <div class="grid two">
+          <section class="card">
+            <h2>Notas rápidas</h2>
+            <div class="form-grid">
+              <label>Nota rápida
+                <input id="noteText" type="text" placeholder="Nieve brutal en Tres Hombres..." />
+              </label>
+              <div class="btn-row">
+                <button id="addNoteBtn" class="ghost">➕ Añadir nota</button>
+                <button id="recordVoiceBtn" class="ghost">🎙️ Grabar voz</button>
+                <button id="stopVoiceBtn" class="ghost" disabled>■ Parar grabación</button>
+              </div>
+              <div class="small">Las notas y notas de voz se añaden al timeline con su hora exacta.</div>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>Timeline unificado</h2>
+            <div id="timeline" class="timeline"></div>
+          </section>
+        </div>
+
+        <section class="card">
+          <h2>Resumen de la sesión</h2>
+          <div id="summaryCards" class="highlight-cards"></div>
+          <div class="btn-row">
+            <button id="generateSummaryBtn" class="ghost">🧠 Generar recap IA (local)</button>
+            <button id="shareTextBtn" class="ghost">📤 Compartir texto</button>
+            <button id="summaryImageBtn" class="ghost">🖼 Descargar resumen (PNG)</button>
+          </div>
+          <textarea id="aiRecap" rows="6" placeholder="Aquí aparecerá el recap del día..."></textarea>
+        </section>
+      </section>
+
+      <!-- HISTORY TAB -->
+      <section id="tab-history" class="tab-pane">
+        <div class="grid two">
+          <section class="card">
+            <div class="card-head"><h2>Historial de sesiones</h2><button id="refreshHistoryBtn" class="ghost">↻</button></div>
+            <div id="sessionList" class="list"></div>
+            <div class="btn-row">
+              <button id="deleteSelectedBtn" class="danger" disabled>🗑️ Borrar sesión</button>
+              <button id="duplicateSessionBtn" class="ghost" disabled>📄 Duplicar config</button>
+              <button id="exportJsonBtn" class="ghost" disabled>JSON</button>
+              <button id="exportCsvBtn" class="ghost" disabled>CSV</button>
+              <button id="exportGpxBtn" class="ghost" disabled>GPX</button>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>Detalle de sesión</h2>
+            <div id="historyDetail" class="empty">Selecciona una sesión.</div>
+            <div id="historyMap" class="map small-map"></div>
+          </section>
+        </div>
+
+        <div class="grid two">
+          <section class="card">
+            <h2>Récords personales</h2>
+            <div id="recordsBox" class="small"></div>
+          </section>
+          <section class="card">
+            <h2>Estadísticas por estación y viaje</h2>
+            <div id="stationStatsBox" class="small"></div>
+          </section>
+        </div>
+      </section>
+
+      <!-- COMPARE TAB -->
+      <section id="tab-compare" class="tab-pane">
+        <section class="card">
+          <h2>Comparar sesiones</h2>
+          <div class="form-grid">
+            <label>Sesión A
+              <select id="compareA"></select>
+            </label>
+            <label>Sesión B
+              <select id="compareB"></select>
+            </label>
+          </div>
+          <div class="btn-row"><button id="compareBtn" class="ghost">Comparar</button></div>
+          <div id="compareResult"></div>
+        </section>
+      </section>
+
+      <!-- SETTINGS TAB -->
+      <section id="tab-settings" class="tab-pane">
+        <div class="grid two">
+          <section class="card">
+            <h2>Privacidad y datos</h2>
+            <div class="btn-row">
+              <button id="exportAllBtn" class="ghost">📦 Exportar copia (JSON)</button>
+              <button id="deleteAllBtn" class="danger">🗑️ Borrar todo</button>
+              <button id="recoverDraftBtn" class="ghost">♻ Recuperar borrador activo</button>
+            </div>
+            <p class="small">La app guarda las sesiones localmente (IndexedDB) en este dispositivo.</p>
+          </section>
+
+          <section class="card">
+            <h2>Meteo / Parte Formigal</h2>
+            <div id="weatherBox" class="weather-box">Pulsa “Meteo Formigal (auto)” en Sesión para cargar datos.</div>
+            <p class="small">Parte estimado (beta) basado en meteo/snowfall. Para decisiones de seguridad, confirma siempre con la estación.</p>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="./app.js"></script>
+</body>
+</html>
