@@ -44,15 +44,8 @@
             </div>
             <div class="btn-row btn-row-tight">
               <button id="startBtn" class="primary big">▶ Start</button>
-              <button id="pauseBtn" class="warn big" disabled>⏸ Pause</button>
-              <button id="resumeBtn" class="ok big" disabled>⏵ Resume</button>
+              <button id="pauseResumeBtn" class="warn big" disabled>⏸ Pause</button>
               <button id="stopBtn" class="danger big" disabled>⏹ Stop</button>
-            </div>
-            <div class="btn-row btn-row-tight">
-              <button id="markerBtn" class="ghost">📍 Marcador</button>
-              <button id="wakeBtn" class="ghost">🔆 Pantalla activa</button>
-              <button id="weatherBtn" class="ghost">🌤 Meteo auto</button>
-              <button id="calibrateBtn" class="ghost">🧭 Calibrar</button>
             </div>
 
             <div id="statusPills" class="pill-wrap">
@@ -92,7 +85,8 @@
               <h2>Mapa en vivo</h2>
               <div class="map-toolbar">
                 <label class="toggle-inline"><input id="speedColorToggle" type="checkbox" /> Color velocidad</label>
-                <button id="centerMapBtn" class="ghost tiny">📍 Mi ubicación</button>
+                <label class="toggle-inline"><input id="followMapToggle" type="checkbox" checked /> Seguirme</label>
+                <button id="centerMapBtn" class="ghost tiny">📍 Ir a mi ubicación</button>
                 <button id="fitTrackBtn" class="ghost tiny">🧭 Encajar track</button>
               </div>
             </div>
@@ -103,11 +97,12 @@
               <summary>🗺️ Mapa de pistas de Formigal (alta resolución)</summary>
               <div class="small">Referencia visual de pistas y remontes. Toca la imagen para verla en grande.</div>
               <div class="piste-map-wrap map-frame">
-                <img id="formigalPisteMapImg" src="https://cdn.bfldr.com/WIENNW6Q/as/jr2c2v6v3qnxqkqwqrnr6xcn/Frmigal?auto=webp&width=2048" alt="Mapa de pistas de Formigal" loading="lazy" />
+                <img id="formigalPisteMapImg" src="https://aramon.com/estaticos/userfiles/image/formigal-panticosa-mapa-pistas-big.jpg" alt="Mapa de pistas de Formigal" loading="lazy" />
               </div>
               <div class="btn-row">
                 <button id="openPisteFullscreenBtn" class="ghost" type="button">🗖 Pantalla completa</button>
-                <a class="ghost-link" href="https://www.onthesnow.co.uk/aragon/formigal/pistemap.html" target="_blank" rel="noopener">Fuente del mapa</a>
+                <a class="ghost-link" href="https://www.formigal-panticosa.com/mapa-y-ficha-tecnica-formigal-panticosa.html" target="_blank" rel="noopener">Fuente mapa oficial</a>
+                <a class="ghost-link" href="https://www.infonieve.es/estacion-esqui/formigal-panticosa/plano-de-pistas/" target="_blank" rel="noopener">Plano en Infonieve</a>
               </div>
             </details>
           </section>
@@ -174,6 +169,17 @@
                     <option value="off">Desactivada</option>
                   </select>
                 </label>
+              </div>
+              <div class="config-extra">
+                <label class="toggle-inline config-toggle"><input id="wakeOnStart" type="checkbox" checked /> Mantener pantalla activa al iniciar (Wake Lock)</label>
+                <div class="btn-row">
+                  <button id="markerBtn" class="ghost" type="button">📍 Marcador</button>
+                  <button id="wakeBtn" class="ghost" type="button">🔆 Pantalla activa</button>
+                  <button id="weatherBtn" class="ghost" type="button">🌤 Meteo auto</button>
+                  <button id="calibrateBtn" class="ghost" type="button">🧭 Calibrar</button>
+                  <button id="restartGpsBtn" class="ghost" type="button">📡 Reintentar GPS</button>
+                </div>
+                <p class="small">Si bloqueas la pantalla, algunos móviles/navegadores pausan el GPS en PWA. Activa “Pantalla activa” y usa el botón “Reintentar GPS” al desbloquear si hiciera falta.</p>
               </div>
             </details>
 
@@ -260,9 +266,10 @@
               Ajusta la configuración de nieve/visibilidad/viento en la pestaña Sesión.
             </div>
             <div class="btn-row">
-              <a class="ghost-link" href="https://www.onthesnow.co.uk/aragon/formigal/pistemap.html" target="_blank" rel="noopener">Mapa de pistas</a>
+              <a class="ghost-link" href="https://www.infonieve.es/estacion-esqui/formigal-panticosa/meteo/" target="_blank" rel="noopener">Meteo Infonieve</a>
+              <a class="ghost-link" href="https://www.formigal-panticosa.com/mapa-y-ficha-tecnica-formigal-panticosa.html" target="_blank" rel="noopener">Mapa pistas oficial</a>
+              <a class="ghost-link" href="https://www.infonieve.es/estacion-esqui/formigal-panticosa/plano-de-pistas/" target="_blank" rel="noopener">Plano pistas Infonieve</a>
               <a class="ghost-link" href="https://www.formigal-panticosa.com" target="_blank" rel="noopener">Web estación</a>
-              <a class="ghost-link" href="https://open-meteo.com/" target="_blank" rel="noopener">Fuente meteo API</a>
             </div>
             <p class="small">Consejo: actualiza meteo al llegar al parking y otra vez después de comer para comparar cambios.</p>
           </section>
@@ -285,8 +292,8 @@
             <h2>PWA y uso en nieve</h2>
             <div class="weather-box">
               • Usa modo <strong>Alta precisión</strong> solo si quieres más detalle.<br>
-              • Mantén la pantalla activa durante el tracking.<br>
-              • Si bloqueas el móvil, algunos navegadores pausan GPS/sensores.<br>
+              • Activa “Pantalla activa” desde la configuración de sesión.<br>
+              • Si bloqueas el móvil, algunos navegadores pausan GPS/sensores (limitación de la PWA).<br>
               • Puedes instalarla desde “Añadir a pantalla de inicio”.
             </div>
           </section>
@@ -303,7 +310,7 @@
         <button id="closePisteFullscreenBtn" class="ghost">✕ Cerrar</button>
       </div>
       <div class="piste-modal-img-wrap">
-        <img id="pisteFullscreenImg" src="https://cdn.bfldr.com/WIENNW6Q/as/jr2c2v6v3qnxqkqwqrnr6xcn/Frmigal?auto=webp&width=2048" alt="Mapa de pistas de Formigal en grande" />
+        <img id="pisteFullscreenImg" src="https://aramon.com/estaticos/userfiles/image/formigal-panticosa-mapa-pistas-big.jpg" alt="Mapa de pistas de Formigal en grande" />
       </div>
     </div>
   </div>

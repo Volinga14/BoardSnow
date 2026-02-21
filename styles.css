@@ -48,7 +48,7 @@ body {
   display: flex; justify-content: space-between; gap: 10px; align-items: center;
   padding: 12px 14px; background: linear-gradient(180deg, var(--bg-soft), var(--bg));
   border-bottom: 1px solid var(--border);
-  position: sticky; top: 0; z-index: 10;
+  position: static;
 }
 .topbar h1 { margin: 0; font-size: 1.1rem; }
 .topbar .sub { margin: 2px 0 0; color: var(--muted); font-size: .82rem; }
@@ -56,7 +56,7 @@ body {
 .tabs {
   display: grid; grid-template-columns: repeat(4, 1fr);
   gap: 6px; padding: 8px; border-bottom: 1px solid var(--border); background: var(--bg);
-  position: sticky; top: 63px; z-index: 9;
+  position: static;
 }
 .tab {
   padding: 10px 6px; border-radius: 12px; border: 1px solid var(--border);
@@ -318,10 +318,14 @@ pre.code {
 }
 
 @media (max-width: 640px) {
-  .tabs { top: 66px; }
+  .tabs { top: auto; }
   .map { height: 270px; }
   .small-map { height: 220px; }
   .top-actions { justify-content: flex-end; }
   .piste-modal-card { inset: 6px; }
   .piste-modal-img-wrap img { min-width: 720px; }
 }
+
+
+.config-extra { margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 10px; }
+.config-toggle { margin-bottom: 8px; }

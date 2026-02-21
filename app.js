@@ -119,7 +119,7 @@
   // ---------- App state ----------
   const state = {
     active: null,          // active session object in memory
-    tracking: { geoWatchId: null, timer: null, motionActive: false, wakeLock: null },
+    tracking: { geoWatchId: null, timer: null, motionActive: false, wakeLock: null, lastPointTs: 0, gpsWatchdog: null, wakeRequestedBySession: false },
     motion: {
       lastAccelMag: null,
       lastRotMag: null,
@@ -251,6 +251,8 @@
       station: $("#stationSelect").value,
       gpsMode: $("#gpsMode").value,
       phonePlacement: $("#phonePlacement").value,
+      wakeOnStart: $("#wakeOnStart")?.checked ?? true,
+      followMap: $("#followMapToggle")?.checked ?? true,
       calibration: state.motion.calibratedNoise || null
     };
     localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
@@ -267,6 +269,8 @@
       if (prefs.station) $("#stationSelect").value = prefs.station;
       if (prefs.gpsMode) $("#gpsMode").value = prefs.gpsMode;
       if (prefs.phonePlacement) $("#phonePlacement").value = prefs.phonePlacement;
+      if (typeof prefs.wakeOnStart === "boolean" && $("#wakeOnStart")) $("#wakeOnStart").checked = prefs.wakeOnStart;
+      if (typeof prefs.followMap === "boolean" && $("#followMapToggle")) $("#followMapToggle").checked = prefs.followMap;
       if (prefs.calibration) {
         state.motion.calibratedNoise = prefs.calibration;
         $("#calibrationState").textContent = `sí (${round(prefs.calibration.accelMean || 0,2)} ± ${round(prefs.calibration.accelSd || 0,2)})`;
@@ -359,6 +363,7 @@
       }).addTo(map).bindPopup("Tu ubicación");
     } else {
       state.ui.liveLayers.currentMarker.setLatLng(latlng);
+      state.ui.liveLayers.currentMarker.bringToFront();
     }
     if (!state.ui.liveLayers.accuracyCircle) {
       state.ui.liveLayers.accuracyCircle = L.circle(latlng, {
@@ -389,6 +394,8 @@
       const c = pos.coords;
       const point = { lat: c.latitude, lon: c.longitude, acc: Number.isFinite(c.accuracy) ? c.accuracy : null, ts: pos.timestamp || Date.now() };
       updateLiveLocationMarker(point);
+
+    const followOn = $("#followMapToggle")?.checked ?? true;
       state.ui.liveMap?.setView([point.lat, point.lon], 15);
     }, (err) => {
       setWarning("No se pudo centrar en tu ubicación: " + (err.message || err));
@@ -464,8 +471,7 @@
   // ---------- Session controls ----------
   function bindControlButtons() {
     $("#startBtn").addEventListener("click", startSession);
-    $("#pauseBtn").addEventListener("click", pauseSession);
-    $("#resumeBtn").addEventListener("click", resumeSession);
+    $("#pauseResumeBtn").addEventListener("click", togglePauseResume);
     $("#stopBtn").addEventListener("click", stopSession);
     $("#markerBtn").addEventListener("click", () => addEvent("marker", "Marcador rápido"));
     $("#generateSummaryBtn").addEventListener("click", generateRecapText);
@@ -487,6 +493,9 @@
 
     $("#gpsMode").addEventListener("change", savePrefs);
     $("#phonePlacement").addEventListener("change", savePrefs);
+    $("#wakeOnStart")?.addEventListener("change", savePrefs);
+    $("#followMapToggle")?.addEventListener("change", savePrefs);
+    $("#restartGpsBtn")?.addEventListener("click", () => restartGeoWatchIfActive("manual"));
 
     $("#addNoteBtn")?.addEventListener("click", () => {
       const noteInput = $("#noteText");
@@ -513,17 +522,34 @@
     });
   }
 
+  function togglePauseResume() {
+    if (!state.active) return;
+    if (state.active.status === "active") return pauseSession();
+    if (state.active.status === "paused") return resumeSession();
+  }
+
   function setSessionButtons(mode) {
     const started = mode === "started";
     const paused = mode === "paused";
     const stopped = mode === "stopped";
     $("#startBtn").disabled = started || paused;
-    $("#pauseBtn").disabled = !started;
-    $("#resumeBtn").disabled = !paused;
+    const pr = $("#pauseResumeBtn");
+    pr.disabled = !(started || paused);
+    pr.classList.remove("warn", "ok");
+    if (started) {
+      pr.classList.add("warn");
+      pr.textContent = "⏸ Pause";
+    } else if (paused) {
+      pr.classList.add("ok");
+      pr.textContent = "⏵ Resume";
+    } else {
+      pr.classList.add("warn");
+      pr.textContent = "⏸ Pause";
+    }
     $("#stopBtn").disabled = !(started || paused);
   }
 
-  function startSession() {
+  async function startSession() {
     if (state.active && state.active.status !== "stopped") {
       setWarning("Ya hay una sesión activa.");
       return;
@@ -536,31 +562,50 @@
     startGeoWatch();
     startMotionCapture();
     startSessionTimer();
+    startGpsWatchdog();
+    if ($("#wakeOnStart")?.checked && !state.tracking.wakeLock) {
+      state.tracking.wakeRequestedBySession = true;
+      await requestWakeLockSafe(true);
+    } else {
+      state.tracking.wakeRequestedBySession = false;
+    }
     setSessionButtons("started");
     setWarning("Sesión iniciada. Mantén la app en primer plano para mejor tracking.");
     renderAllLive();
     saveDraft();
   }
 
-  function pauseSession() {
+  async function pauseSession() {
     if (!state.active || state.active.status !== "active") return;
     state.active.status = "paused";
     state.active.events.push({ id: uid(), ts: Date.now(), type: "session", label: "Pausa" });
     stopGeoWatch();
     stopMotionCapture();
     stopSessionTimer();
+    stopGpsWatchdog();
+    if (state.tracking.wakeRequestedBySession && state.tracking.wakeLock) {
+      try { await state.tracking.wakeLock.release(); } catch {}
+    }
+    state.tracking.wakeRequestedBySession = false;
     setSessionButtons("paused");
     saveDraft();
     renderTimeline();
   }
 
-  function resumeSession() {
+  async function resumeSession() {
     if (!state.active || state.active.status !== "paused") return;
     state.active.status = "active";
     state.active.events.push({ id: uid(), ts: Date.now(), type: "session", label: "Reanudada" });
     startGeoWatch();
     startMotionCapture();
     startSessionTimer();
+    startGpsWatchdog();
+    if ($("#wakeOnStart")?.checked && !state.tracking.wakeLock) {
+      state.tracking.wakeRequestedBySession = true;
+      await requestWakeLockSafe(true);
+    } else {
+      state.tracking.wakeRequestedBySession = false;
+    }
     setSessionButtons("started");
     saveDraft();
     renderTimeline();
@@ -571,6 +616,11 @@
     stopGeoWatch();
     stopMotionCapture();
     stopSessionTimer();
+    stopGpsWatchdog();
+    if (state.tracking.wakeRequestedBySession && state.tracking.wakeLock) {
+      try { await state.tracking.wakeLock.release(); } catch {}
+    }
+    state.tracking.wakeRequestedBySession = false;
     state.active.endedAt = Date.now();
     state.active.status = "stopped";
     state.active.events.push({ id: uid(), ts: Date.now(), type: "session", label: "Fin de sesión" });
@@ -607,6 +657,10 @@
       setWarning("Geolocalización no soportada.");
       return;
     }
+    if (state.tracking.geoWatchId != null) {
+      navigator.geolocation.clearWatch(state.tracking.geoWatchId);
+      state.tracking.geoWatchId = null;
+    }
     const gpsMode = $("#gpsMode").value;
     const opts = {
       enableHighAccuracy: gpsMode === "high",
@@ -614,6 +668,7 @@
       timeout: 10000
     };
     state.tracking.geoWatchId = navigator.geolocation.watchPosition(onGeoPoint, onGeoError, opts);
+    state.tracking.lastPointTs = Date.now();
     $("#gpsStatus").textContent = `GPS: tracking (${gpsMode})`;
     $("#batteryStatus").textContent = gpsMode === "high" ? "Batería: alta precisión" : "Batería: equilibrado";
   }
@@ -622,13 +677,18 @@
     if (state.tracking.geoWatchId != null) {
       navigator.geolocation.clearWatch(state.tracking.geoWatchId);
       state.tracking.geoWatchId = null;
+      state.tracking.lastPointTs = 0;
       $("#gpsStatus").textContent = "GPS: pausado";
     }
   }
 
   function onGeoError(err) {
-    setWarning("Error GPS: " + (err.message || err));
+    const msg = err?.message || "error desconocido";
+    setWarning("Error GPS: " + msg + ". Si acabas de desbloquear el móvil, pulsa ‘Reintentar GPS’." );
     $("#gpsStatus").textContent = "GPS: error";
+    if (state.active?.status === "active") {
+      setTimeout(() => restartGeoWatchIfActive("error GPS"), 1200);
+    }
   }
 
   function onGeoPoint(pos) {
@@ -643,6 +703,9 @@
       rawSpeedKmh: Number.isFinite(c.speed) ? c.speed * 3.6 : null,
       speedKmh: 0
     };
+
+    state.tracking.lastPointTs = point.ts;
+    $("#gpsStatus").textContent = `GPS: tracking (${$("#gpsMode")?.value || "balanced"})`;
 
     // Filter low quality points
     if (point.acc && point.acc > 80) {
@@ -696,12 +759,13 @@
     pts.push(point);
     updateLiveLocationMarker(point);
 
+    const followOn = $("#followMapToggle")?.checked ?? true;
+
     // Detect state change events (stops, movement, lift/descent approximate)
     maybeEmitMovementEvents();
 
     drawRouteOnMap(state.ui.liveMap, state.ui.liveLayers, pts, $("#speedColorToggle").checked);
-    if (pts.length % 5 === 0) {
-      // keep map centered occasionally
+    if (followOn) {
       state.ui.liveMap.panTo([point.lat, point.lon], { animate: false });
     }
     updateLiveStats();
@@ -1769,28 +1833,73 @@ Caption corto:
     }
   }
 
-  // ---------- Wake lock ----------
-  async function toggleWakeLock() {
-    if (!("wakeLock" in navigator)) {
-      setWarning("Wake Lock no soportado en este navegador.");
-      return;
-    }
-    try {
-      if (state.tracking.wakeLock) {
-        await state.tracking.wakeLock.release();
-        state.tracking.wakeLock = null;
-        $("#wakeStatus").textContent = "Pantalla: normal";
-        return;
+  function restartGeoWatchIfActive(reason = "") {
+    if (!state.active || state.active.status !== "active") return;
+    stopGeoWatch();
+    startGeoWatch();
+    const why = reason ? ` (${reason})` : "";
+    setWarning(`Reintentando GPS${why}.`);
+  }
+
+  function startGpsWatchdog() {
+    stopGpsWatchdog();
+    state.tracking.gpsWatchdog = setInterval(() => {
+      if (!state.active || state.active.status !== "active") return;
+      const lastTs = state.tracking.lastPointTs || 0;
+      if (!lastTs) return;
+      const ageMs = Date.now() - lastTs;
+      if (ageMs < 15000) return;
+      const hidden = document.hidden;
+      $("#gpsStatus").textContent = hidden ? "GPS: en pausa (posible bloqueo)" : "GPS: sin actualización";
+      setWarning(hidden
+        ? "Pantalla bloqueada o app en segundo plano: el navegador puede pausar el GPS en una PWA. Desbloquea y pulsa ‘Reintentar GPS’ si no vuelve solo."
+        : "No llegan puntos GPS nuevos. Comprueba permisos/cobertura y pulsa ‘Reintentar GPS’."
+      );
+      if (ageMs > 30000 && !hidden) {
+        restartGeoWatchIfActive("sin puntos");
       }
+    }, 5000);
+  }
+
+  function stopGpsWatchdog() {
+    if (state.tracking.gpsWatchdog) clearInterval(state.tracking.gpsWatchdog);
+    state.tracking.gpsWatchdog = null;
+  }
+
+  // ---------- Wake lock ----------
+  async function requestWakeLockSafe(silent = false) {
+    if (!("wakeLock" in navigator)) {
+      if (!silent) setWarning("Wake Lock no soportado en este navegador.");
+      return false;
+    }
+    if (state.tracking.wakeLock) return true;
+    try {
       state.tracking.wakeLock = await navigator.wakeLock.request("screen");
       $("#wakeStatus").textContent = "Pantalla: activa";
+      if ($("#wakeBtn")) $("#wakeBtn").textContent = "🔅 Pantalla normal";
       state.tracking.wakeLock.addEventListener("release", () => {
         $("#wakeStatus").textContent = "Pantalla: normal";
+        if ($("#wakeBtn")) $("#wakeBtn").textContent = "🔆 Pantalla activa";
         state.tracking.wakeLock = null;
       });
+      return true;
     } catch (err) {
-      setWarning("No se pudo activar pantalla: " + (err.message || err));
+      if (!silent) setWarning("No se pudo activar pantalla: " + (err.message || err));
+      return false;
     }
+  }
+
+  async function toggleWakeLock() {
+    if (state.tracking.wakeLock) {
+      try {
+        await state.tracking.wakeLock.release();
+      } catch {}
+      state.tracking.wakeLock = null;
+      $("#wakeStatus").textContent = "Pantalla: normal";
+      if ($("#wakeBtn")) $("#wakeBtn").textContent = "🔆 Pantalla activa";
+      return;
+    }
+    await requestWakeLockSafe(false);
   }
 
   // ---------- Rendering all live ----------
@@ -1862,7 +1971,12 @@ Caption corto:
   // ---------- misc UI state ----------
   document.addEventListener("visibilitychange", () => {
     if (document.hidden && state.active?.status === "active") {
-      setWarning("La app pasó a segundo plano. En PWA el tracking puede pausarse según el navegador.");
+      setWarning("La app pasó a segundo plano. En PWA el tracking puede pausarse si bloqueas la pantalla.");
+      return;
+    }
+    if (!document.hidden && state.active?.status === "active") {
+      if ($("#wakeOnStart")?.checked && !state.tracking.wakeLock) requestWakeLockSafe(true);
+      restartGeoWatchIfActive("app en primer plano");
     }
   });
 
