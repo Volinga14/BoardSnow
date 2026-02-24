@@ -4,13 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#0b1220" />
-  <meta name="description" content="PWA de tracking para esquí/snow en Formigal: GPS, velocidad, sensores, mapa de pistas y resumen." />
+  <meta name="description" content="Tracking PWA sencillo para esquí/snow en Formigal" />
   <title>Formigal Session AI</title>
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" type="image/png" href="./icons/icon-192.png" />
-  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
@@ -18,305 +16,255 @@
     <header class="topbar">
       <div>
         <h1>🏂 Formigal Session AI</h1>
-        <p class="sub">PWA v1 · GPS + sensores + mapa pistas + resumen</p>
+        <p class="sub">Versión simple · estable · guardado local automático</p>
       </div>
       <div class="top-actions">
         <button id="installBtn" class="ghost" hidden>Instalar</button>
-        <button id="themeBtn" class="ghost">🌙/☀️</button>
-        <button id="contrastBtn" class="ghost">Alto contraste</button>
+        <button id="themeBtn" class="ghost" title="Tema">🌙/☀️</button>
+        <button id="contrastBtn" class="ghost" title="Contraste">⚫/⚪</button>
       </div>
     </header>
 
     <nav class="tabs">
-      <button class="tab active" data-tab="live">Sesión</button>
+      <button class="tab active" data-tab="session">Sesión</button>
       <button class="tab" data-tab="history">Historial</button>
       <button class="tab" data-tab="meteo">Meteo</button>
       <button class="tab" data-tab="settings">Ajustes</button>
     </nav>
 
     <main>
-      <section id="tab-live" class="tab-pane active">
-        <div class="grid two top-priority-grid">
-          <section class="card card-compact">
-            <div class="card-head">
-              <h2>Control de sesión</h2>
-              <span class="small">Acceso rápido</span>
-            </div>
-            <div class="btn-row btn-row-tight">
-              <button id="startBtn" class="primary big">▶ Start</button>
-              <button id="pauseResumeBtn" class="warn big" disabled>⏸ Pause</button>
-              <button id="stopBtn" class="danger big" disabled>⏹ Stop</button>
-            </div>
-
-            <div id="statusPills" class="pill-wrap">
-              <span class="pill" id="gpsStatus">GPS: —</span>
-              <span class="pill" id="motionStatus">Movimiento: —</span>
-              <span class="pill" id="batteryStatus">Batería: normal</span>
-              <span class="pill" id="wakeStatus">Pantalla: normal</span>
-            </div>
-            <div id="warningBox" class="notice"></div>
-          </section>
-
-          <section class="card">
-            <div class="card-head">
-              <h2>Panel de sesión</h2>
-              <span class="small">Datos en directo</span>
-            </div>
-            <div class="stats-live">
-              <div class="stat"><span>Velocidad</span><strong id="liveSpeed">0.0 km/h</strong></div>
-              <div class="stat"><span>Máx</span><strong id="liveMaxSpeed">0.0 km/h</strong></div>
-              <div class="stat"><span>Media</span><strong id="liveAvgSpeed">0.0 km/h</strong></div>
-              <div class="stat"><span>Distancia</span><strong id="liveDistance">0.00 km</strong></div>
-              <div class="stat"><span>Duración</span><strong id="liveDuration">00:00:00</strong></div>
-              <div class="stat"><span>Movimiento</span><strong id="liveMovingTime">00:00:00</strong></div>
-              <div class="stat"><span>Desnivel +</span><strong id="liveAsc">0 m</strong></div>
-              <div class="stat"><span>Desnivel −</span><strong id="liveDesc">0 m</strong></div>
-              <div class="stat"><span>Runs</span><strong id="liveRuns">0</strong></div>
-              <div class="stat"><span>Saltos</span><strong id="liveJumps">0</strong></div>
-              <div class="stat"><span>Top run</span><strong id="liveTopRun">—</strong></div>
-              <div class="stat"><span>Momento intenso</span><strong id="liveTopIntensity">—</strong></div>
-            </div>
-          </section>
-        </div>
-
-        <div class="grid two">
-          <section class="card">
-            <div class="card-head map-toolbar-wrap">
-              <h2>Mapa en vivo</h2>
-              <div class="map-toolbar">
-                <label class="toggle-inline"><input id="speedColorToggle" type="checkbox" /> Color velocidad</label>
-                <label class="toggle-inline"><input id="followMapToggle" type="checkbox" checked /> Seguirme</label>
-                <button id="centerMapBtn" class="ghost tiny">📍 Ir a mi ubicación</button>
-                <button id="fitTrackBtn" class="ghost tiny">🧭 Encajar track</button>
-              </div>
-            </div>
-            <div class="map-frame"><div id="map" class="map"></div></div>
-            <div class="small">Estación seleccionada: <span id="stationLabel">Formigal</span></div>
-
-            <details class="piste-map-panel" open>
-              <summary>🗺️ Mapa de pistas de Formigal (alta resolución)</summary>
-              <div class="small">Referencia visual de pistas y remontes. Toca la imagen para verla en grande.</div>
-              <div class="piste-map-wrap map-frame">
-                <img id="formigalPisteMapImg" src="https://aramon.com/estaticos/userfiles/image/formigal-panticosa-mapa-pistas-big.jpg" alt="Mapa de pistas de Formigal" loading="lazy" />
-              </div>
-              <div class="btn-row">
-                <button id="openPisteFullscreenBtn" class="ghost" type="button">🗖 Pantalla completa</button>
-                <a class="ghost-link" href="https://www.formigal-panticosa.com/mapa-y-ficha-tecnica-formigal-panticosa.html" target="_blank" rel="noopener">Fuente mapa oficial</a>
-                <a class="ghost-link" href="https://www.infonieve.es/estacion-esqui/formigal-panticosa/plano-de-pistas/" target="_blank" rel="noopener">Plano en Infonieve</a>
-              </div>
-            </details>
-          </section>
-
-          <section class="card">
-            <h2>Configuración de sesión</h2>
-            <details id="configDetails" class="details-block">
-              <summary>⚙️ Abrir / cerrar configuración</summary>
-              <div class="form-grid details-content">
-                <label>Nombre sesión
-                  <input id="sessionName" type="text" placeholder="Formigal Día 1" />
-                </label>
-                <label>Trip (opcional)
-                  <input id="tripName" type="text" placeholder="Formigal Febrero 2026" />
-                </label>
-                <label>Tipo
-                  <select id="sessionType">
-                    <option>Snowboard</option>
-                    <option>Esquí</option>
-                  </select>
-                </label>
-                <label>Estación
-                  <select id="stationSelect"></select>
-                </label>
-                <label>Precisión GPS
-                  <select id="gpsMode">
-                    <option value="balanced">Equilibrado</option>
-                    <option value="high">Alta precisión</option>
-                  </select>
-                </label>
-                <label>Colocación móvil (perfil)
-                  <select id="phonePlacement">
-                    <option value="jacket">Bolsillo chaqueta</option>
-                    <option value="pants">Pantalón</option>
-                    <option value="backpack">Mochila</option>
-                    <option value="chest">Pecho</option>
-                  </select>
-                </label>
-                <label>Condición nieve
-                  <select id="snowCondition">
-                    <option>polvo</option>
-                    <option>dura</option>
-                    <option>primavera</option>
-                    <option>hielo</option>
-                  </select>
-                </label>
-                <label>Visibilidad
-                  <select id="visibility">
-                    <option>buena</option>
-                    <option>media</option>
-                    <option>mala</option>
-                  </select>
-                </label>
-                <label>Viento
-                  <select id="windLevel">
-                    <option>bajo</option>
-                    <option>medio</option>
-                    <option>fuerte</option>
-                  </select>
-                </label>
-                <label>Detección de saltos
-                  <select id="jumpToggle">
-                    <option value="on">Activada</option>
-                    <option value="off">Desactivada</option>
-                  </select>
-                </label>
-              </div>
-              <div class="config-extra">
-                <label class="toggle-inline config-toggle"><input id="wakeOnStart" type="checkbox" checked /> Mantener pantalla activa al iniciar (Wake Lock)</label>
-                <div class="btn-row">
-                  <button id="markerBtn" class="ghost" type="button">📍 Marcador</button>
-                  <button id="wakeBtn" class="ghost" type="button">🔆 Pantalla activa</button>
-                  <button id="weatherBtn" class="ghost" type="button">🌤 Meteo auto</button>
-                  <button id="calibrateBtn" class="ghost" type="button">🧭 Calibrar</button>
-                  <button id="restartGpsBtn" class="ghost" type="button">📡 Reintentar GPS</button>
-                </div>
-                <p class="small">Si bloqueas la pantalla, algunos móviles/navegadores pausan el GPS en PWA. Activa “Pantalla activa” y usa el botón “Reintentar GPS” al desbloquear si hiciera falta.</p>
-              </div>
-            </details>
-
-            <h2 class="subsection-title">Permisos y sensores</h2>
-            <div class="btn-row">
-              <button id="permLocation" class="ghost">Permiso ubicación</button>
-              <button id="permMotion" class="ghost">Permiso movimiento</button>
-            </div>
-            <div class="sensor-test">
-              <div>Accel mag: <strong id="accelLive">—</strong></div>
-              <div>Rot mag: <strong id="rotLive">—</strong></div>
-              <div>Intensidad: <strong id="intensityLive">—</strong></div>
-              <div>Calibración: <strong id="calibrationState">no</strong></div>
-            </div>
-            <p class="small">Consejo PWA: deja la app en primer plano y activa pantalla para mejorar el tracking.</p>
-          </section>
-        </div>
-
-        <section class="card">
-          <h2>Timeline unificado</h2>
-          <div id="timeline" class="timeline"></div>
-        </section>
-
-        <section class="card">
-          <h2>Resumen de la sesión</h2>
-          <div id="summaryCards" class="highlight-cards"></div>
-          <div class="btn-row">
-            <button id="generateSummaryBtn" class="ghost">🧠 Generar recap IA (local)</button>
-            <button id="shareTextBtn" class="ghost">📤 Compartir texto</button>
-            <button id="summaryImageBtn" class="ghost">🖼 Descargar resumen (PNG)</button>
+      <section id="tab-session" class="tab-pane active">
+        <section class="card compact">
+          <div class="card-head">
+            <h2>Control y panel en directo</h2>
+            <span id="sessionStateBadge" class="badge">Sin sesión</span>
           </div>
-          <textarea id="aiRecap" rows="6" placeholder="Aquí aparecerá el recap del día..."></textarea>
+          <div class="control-row">
+            <button id="startBtn" class="primary big">▶ Start</button>
+            <button id="pauseBtn" class="warn big" disabled>⏸ Pause</button>
+            <button id="stopBtn" class="danger big" disabled>⏹ Stop</button>
+          </div>
+          <div class="pills" id="statusPills">
+            <span class="pill" id="gpsStatus">GPS: —</span>
+            <span class="pill" id="motionStatus">Sensores: —</span>
+            <span class="pill" id="saveStatus">Guardado: —</span>
+          </div>
+          <div id="warningBar" class="notice hidden"></div>
+          <div class="stats-grid">
+            <div class="metric"><span>Vel.</span><strong id="mSpeed">0.0</strong><em>km/h</em></div>
+            <div class="metric"><span>Máx</span><strong id="mMax">0.0</strong><em>km/h</em></div>
+            <div class="metric"><span>Media</span><strong id="mAvg">0.0</strong><em>km/h</em></div>
+            <div class="metric"><span>Tiempo</span><strong id="mDuration">00:00:00</strong><em></em></div>
+            <div class="metric"><span>Mov.</span><strong id="mMoving">00:00:00</strong><em></em></div>
+            <div class="metric"><span>Dist.</span><strong id="mDistance">0.00</strong><em>km</em></div>
+            <div class="metric"><span>Desnivel +</span><strong id="mAsc">0</strong><em>m</em></div>
+            <div class="metric"><span>Desnivel −</span><strong id="mDesc">0</strong><em>m</em></div>
+            <div class="metric"><span>Runs</span><strong id="mRuns">0</strong><em></em></div>
+            <div class="metric"><span>Remontes</span><strong id="mLifts">0</strong><em></em></div>
+            <div class="metric"><span>T. remonte</span><strong id="mLiftTime">00:00:00</strong><em></em></div>
+            <div class="metric"><span>Saltos</span><strong id="mJumps">0</strong><em></em></div>
+          </div>
         </section>
+
+        <section class="card">
+          <details id="sensorsPanel">
+            <summary>🧭 Sensores, calibración y GPS</summary>
+            <div class="details-head">
+              <div class="small">Todo junto: estado de sensores, calibración y controles rápidos de permisos/GPS.</div>
+              <button id="calibrateBtn" class="ghost tiny" type="button">🧭 Calibrar 5s</button>
+            </div>
+            <div class="sensor-grid">
+              <div><span>Aceleración</span><strong id="accelValue">—</strong></div>
+              <div><span>Giro</span><strong id="gyroValue">—</strong></div>
+              <div><span>Estado</span><strong id="motionState">—</strong></div>
+              <div><span>Calibración</span><strong id="calibrationState">no</strong></div>
+              <div><span>Intensidad</span><strong id="intensityState">—</strong></div>
+              <div><span>Último evento</span><strong id="sensorLastTs">—</strong></div>
+            </div>
+            <div class="config-row">
+              <label class="toggle-label"><input id="wakeOnStart" type="checkbox" checked> Pantalla activa al iniciar</label>
+              <label class="toggle-label"><input id="jumpEnabled" type="checkbox" checked> Detectar saltos (estimado)</label>
+              <label class="toggle-label"><input id="robustMode" type="checkbox" checked> Modo grabación robusta</label>
+            </div>
+            <div class="config-row buttons">
+              <button id="requestLocationBtn" class="ghost" type="button">Permiso ubicación</button>
+              <button id="requestMotionBtn" class="ghost" type="button">Permiso sensores</button>
+              <button id="retryGpsBtn" class="ghost" type="button">Reintentar GPS</button>
+              <button id="wakeBtn" class="ghost" type="button">Pantalla activa ahora</button>
+            </div>
+            <div class="small">Consejo: calibra 5 segundos en parado. El modo robusto fuerza más reintentos de GPS/sensores y reacquire de pantalla activa (consume más batería, pero aguanta mejor).</div>
+          </details>
+        </section>
+
+        
+
+        <section class="card">
+          <div class="card-head wrap">
+            <h2>Mapa en vivo</h2>
+            <div class="inline-actions">
+              <button id="centerBtn" class="ghost tiny">📍 Mi ubicación</button>
+              <button id="fitBtn" class="ghost tiny">🧭 Encajar track</button>
+            </div>
+          </div>
+          <div class="map-frame"><div id="liveMap" class="map"></div></div>
+          <div class="map-options">
+            <label><input type="checkbox" id="followMe" checked> Seguirme</label>
+            <label><input type="checkbox" id="speedColors"> Colorear track por velocidad</label>
+          </div>
+        </section>
+
+        <section class="card">
+          <details id="sessionConfig">
+            <summary>⚙️ Configuración de sesión (desplegable)</summary>
+            <div class="config-grid">
+              <label>Nombre sesión
+                <input id="sessionName" type="text" placeholder="Formigal Día 1" />
+              </label>
+              <label>Tipo
+                <select id="sessionType"><option>Snowboard</option><option>Esquí</option></select>
+              </label>
+              <label>Estación
+                <select id="stationSelect"><option value="formigal">Formigal-Panticosa</option></select>
+              </label>
+              <label>Precisión GPS
+                <select id="gpsMode"><option value="balanced">Equilibrado</option><option value="high">Alta precisión</option></select>
+              </label>
+              <label>Condición nieve
+                <select id="snowCondition"><option>polvo</option><option>dura</option><option>primavera</option><option>hielo</option></select>
+              </label>
+              <label>Visibilidad
+                <select id="visibility"><option>buena</option><option>media</option><option>mala</option></select>
+              </label>
+              <label>Viento
+                <select id="windLevel"><option>bajo</option><option>medio</option><option>fuerte</option></select>
+              </label>
+              <label>Perfil móvil
+                <select id="phonePlacement"><option value="jacket">Bolsillo chaqueta</option><option value="pants">Pantalón</option><option value="backpack">Mochila</option><option value="chest">Pecho</option></select>
+              </label>
+            </div>
+            <p class="small">Configura nombre, tipo, GPS y condiciones antes de iniciar. Los controles de sensores/GPS están justo debajo del panel en directo.</p>
+          </details>
+        </section>
+
+        <section class="card">
+          <div class="card-head wrap">
+            <h2>Mapa de pistas Formigal</h2>
+            <div class="inline-actions">
+              <button id="openPisteFullscreen" class="ghost tiny">🗖 Pantalla completa</button>
+            </div>
+          </div>
+          <div class="map-frame piste">
+            <img id="pisteImage" src="https://aramon.com/estaticos/userfiles/image/formigal-panticosa-mapa-pistas-big.jpg" alt="Mapa de pistas Formigal" />
+          </div>
+          <div class="btn-links">
+            <a class="ghost-link" href="https://www.formigal-panticosa.com/mapa-y-ficha-tecnica-formigal-panticosa.html" target="_blank" rel="noopener">Web oficial Formigal</a>
+            <a class="ghost-link" href="https://www.infonieve.es/estacion-esqui/formigal-panticosa/plano-de-pistas/" target="_blank" rel="noopener">Plano en Infonieve</a>
+          </div>
+        </section>
+
+<section class="card">
+  <div class="card-head wrap">
+    <h2>📍 Pista / remonte actual (experimental)</h2>
+    <div class="inline-actions">
+      <button id="dynMapFullscreenBtn" class="ghost tiny" type="button">🗖 Expandir</button>
+    </div>
+  </div>
+  <div class="small">Estimación en tiempo real con GPS + detección de movimiento. Marca el punto sobre el plano oficial (aprox.) y calcula la zona y remonte más probables.</div>
+  <div class="where-grid">
+    <div class="tile"><span>Sector</span><strong id="whereSector">—</strong></div>
+    <div class="tile"><span>Estado</span><strong id="whereState">—</strong></div>
+    <div class="tile"><span>Pista/zona</span><strong id="wherePiste">—</strong></div>
+    <div class="tile"><span>Remonte</span><strong id="whereLift">—</strong></div>
+    <div class="tile"><span>Confianza</span><strong id="whereConfidence">—</strong></div>
+    <div class="tile"><span>Actualizado</span><strong id="whereTs">—</strong></div>
+  </div>
+  <div class="map-frame dyn-piste" id="dynPisteFrame">
+    <div class="dyn-piste-wrap" id="dynPisteWrap">
+      <img id="dynPisteImage" src="https://aramon.com/estaticos/userfiles/image/formigal-panticosa-mapa-pistas-big.jpg" alt="Mapa dinámico Formigal" />
+      <svg id="dynPisteSvg" class="dyn-piste-svg" viewBox="0 0 1024 512" preserveAspectRatio="xMidYMid meet"></svg>
+      <div id="dynPisteMarker" class="dyn-marker hidden" aria-hidden="true"></div>
+    </div>
+  </div>
+  <div class="map-options wrap">
+    <label><input type="checkbox" id="dynShowTrack" checked> Mostrar track</label>
+    <label><input type="checkbox" id="dynShowProjection" checked> Mostrar marcador GPS</label>
+  </div>
+  <div class="small">Nota: proyección aproximada (no es un GIS). Sirve para orientarte rápido.</div>
+</section>
+
+
+        
       </section>
 
       <section id="tab-history" class="tab-pane">
-        <div class="grid two">
-          <section class="card">
-            <div class="card-head"><h2>Historial de sesiones</h2><button id="refreshHistoryBtn" class="ghost">↻</button></div>
-            <div id="sessionList" class="list"></div>
-            <div class="btn-row">
-              <button id="deleteSelectedBtn" class="danger" disabled>🗑️ Borrar sesión</button>
-              <button id="duplicateSessionBtn" class="ghost" disabled>📄 Duplicar config</button>
-              <button id="exportJsonBtn" class="ghost" disabled>JSON</button>
-              <button id="exportCsvBtn" class="ghost" disabled>CSV</button>
-              <button id="exportGpxBtn" class="ghost" disabled>GPX</button>
+        <section class="card">
+          <div class="card-head wrap">
+            <h2>Historial de sesiones</h2>
+            <div class="inline-actions">
+              <button id="refreshHistoryBtn" class="ghost tiny">↻ Recargar</button>
+              <button id="clearAllBtn" class="ghost tiny danger-outline">Borrar todo</button>
             </div>
-          </section>
-
-          <section class="card">
-            <h2>Detalle de sesión</h2>
-            <div id="historyDetail" class="empty">Selecciona una sesión.</div>
-            <div class="map-frame"><div id="historyMap" class="map small-map"></div></div>
-          </section>
-        </div>
-
-        <div class="grid two">
-          <section class="card">
-            <h2>Récords personales</h2>
-            <div id="recordsBox" class="small"></div>
-          </section>
-          <section class="card">
-            <h2>Estadísticas por estación y viaje</h2>
-            <div id="stationStatsBox" class="small"></div>
-          </section>
-        </div>
+          </div>
+          <div id="historyList" class="history-list"></div>
+        </section>
+        <section class="card">
+          <div class="card-head"><h2>Detalle sesión</h2></div>
+          <div id="historyEmpty" class="small">Selecciona una sesión para ver detalle, mapa y exportar.</div>
+          <div id="historyDetail" class="hidden">
+            <div id="historySummary" class="summary-grid"></div>
+            <div class="map-frame"><div id="historyMap" class="map"></div></div>
+            <div class="control-row wrap">
+              <button id="exportJsonBtn" class="ghost">Export JSON</button>
+              <button id="exportCsvBtn" class="ghost">Export CSV</button>
+              <button id="exportGpxBtn" class="ghost">Export GPX</button>
+              <button id="duplicateBtn" class="ghost">Duplicar config</button>
+              <button id="deleteSessionBtn" class="ghost danger-outline">Borrar sesión</button>
+            </div>
+          </div>
+        </section>
       </section>
 
       <section id="tab-meteo" class="tab-pane">
-        <div class="grid two">
-          <section class="card">
-            <div class="card-head">
-              <h2>Meteo Formigal</h2>
-              <button id="weatherTabRefreshBtn" class="ghost">Actualizar</button>
-            </div>
-            <div id="weatherBox" class="weather-box">Pulsa “Actualizar” para cargar la meteo automática.</div>
-            <div id="weatherExtraBox" class="weather-box weather-box-secondary">Aquí verás un resumen ampliado (viento, nieve y contexto).</div>
-          </section>
-
-          <section class="card">
-            <h2>Contexto rápido de la sesión</h2>
-            <div class="weather-box" id="meteoSessionContext">
-              Estación: <strong>Formigal</strong><br>
-              Ajusta la configuración de nieve/visibilidad/viento en la pestaña Sesión.
-            </div>
-            <div class="btn-row">
-              <a class="ghost-link" href="https://www.infonieve.es/estacion-esqui/formigal-panticosa/meteo/" target="_blank" rel="noopener">Meteo Infonieve</a>
-              <a class="ghost-link" href="https://www.formigal-panticosa.com/mapa-y-ficha-tecnica-formigal-panticosa.html" target="_blank" rel="noopener">Mapa pistas oficial</a>
-              <a class="ghost-link" href="https://www.infonieve.es/estacion-esqui/formigal-panticosa/plano-de-pistas/" target="_blank" rel="noopener">Plano pistas Infonieve</a>
-              <a class="ghost-link" href="https://www.formigal-panticosa.com" target="_blank" rel="noopener">Web estación</a>
-            </div>
-            <p class="small">Consejo: actualiza meteo al llegar al parking y otra vez después de comer para comparar cambios.</p>
-          </section>
-        </div>
+        <section class="card">
+          <div class="card-head wrap">
+            <h2>Meteo Formigal</h2>
+            <button id="refreshWeatherBtn" class="ghost tiny">↻ Actualizar</button>
+          </div>
+          <div id="weatherBox" class="weather-box">Cargando…</div>
+          <div class="btn-links wrap">
+            <a class="ghost-link" href="https://www.infonieve.es/estacion-esqui/formigal-panticosa/el-tiempo/" target="_blank" rel="noopener">Meteo Infonieve</a>
+            <a class="ghost-link" href="https://www.infonieve.es/estacion-esqui/formigal-panticosa/parte-de-nieve/" target="_blank" rel="noopener">Parte de nieve Infonieve</a>
+            <a class="ghost-link" href="https://www.formigal-panticosa.com/mapa-y-ficha-tecnica-formigal-panticosa.html" target="_blank" rel="noopener">Mapa oficial Formigal</a>
+            <a class="ghost-link" href="https://www.infonieve.es/estacion-esqui/formigal-panticosa/plano-de-pistas/" target="_blank" rel="noopener">Plano Infonieve</a>
+          </div>
+        </section>
       </section>
 
       <section id="tab-settings" class="tab-pane">
-        <div class="grid two">
-          <section class="card">
-            <h2>Privacidad y datos</h2>
-            <div class="btn-row">
-              <button id="exportAllBtn" class="ghost">📦 Exportar copia (JSON)</button>
-              <button id="deleteAllBtn" class="danger">🗑️ Borrar todo</button>
-              <button id="recoverDraftBtn" class="ghost">♻ Recuperar borrador activo</button>
-            </div>
-            <p class="small">La app guarda las sesiones localmente (IndexedDB) en este dispositivo.</p>
-          </section>
-
-          <section class="card">
-            <h2>PWA y uso en nieve</h2>
-            <div class="weather-box">
-              • Usa modo <strong>Alta precisión</strong> solo si quieres más detalle.<br>
-              • Activa “Pantalla activa” desde la configuración de sesión.<br>
-              • Si bloqueas el móvil, algunos navegadores pausan GPS/sensores (limitación de la PWA).<br>
-              • Puedes instalarla desde “Añadir a pantalla de inicio”.
-            </div>
-          </section>
-        </div>
+        <section class="card">
+          <h2>Ajustes</h2>
+          <div class="config-row">
+            <label><input id="alwaysDark" type="checkbox"> Mantener tema oscuro</label>
+            <label><input id="highContrastToggle" type="checkbox"> Alto contraste</label>
+          </div>
+          <div class="config-row buttons">
+            <button id="exportAllBtn" class="ghost">Exportar copia completa</button>
+            <button id="resetPrefsBtn" class="ghost">Reset ajustes</button>
+          </div>
+          <div class="small">Todo se guarda en tu móvil (localStorage). Sin fotos ni vídeos para mantener la app ligera y estable.</div>
+        </section>
       </section>
     </main>
   </div>
 
-  <div id="pisteFullscreenModal" class="piste-modal" hidden>
-    <div class="piste-modal-backdrop" id="closePisteFullscreenBackdrop"></div>
-    <div class="piste-modal-card">
-      <div class="card-head">
-        <h2>Mapa de pistas · Formigal</h2>
-        <button id="closePisteFullscreenBtn" class="ghost">✕ Cerrar</button>
-      </div>
-      <div class="piste-modal-img-wrap">
-        <img id="pisteFullscreenImg" src="https://aramon.com/estaticos/userfiles/image/formigal-panticosa-mapa-pistas-big.jpg" alt="Mapa de pistas de Formigal en grande" />
-      </div>
-    </div>
-  </div>
+  <dialog id="imageModal" class="image-modal">
+    <form method="dialog" class="image-modal-content">
+      <button class="close-x">✕</button>
+      <img id="imageModalImg" alt="Mapa de pistas" />
+    </form>
+  </dialog>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="./app.js"></script>
 </body>
 </html>
